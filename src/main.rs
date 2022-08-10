@@ -5,30 +5,91 @@ use std::time::Instant;
 
 use indicatif::ProgressBar;
 
+const WORD_FILENAME: &str = "words_alpha.txt";
+const GRAPH_FILENAME: &str = "graph.csv";
+const OUT_FILENAME: &str = "cliques.txt";
+
 fn main() {
-    let graph = match read_graph("graph.csv") {
+    let sorted_map = {
+        let file = File::open(WORD_FILENAME).expect("Failed to open words file");
+        let words_five_letter = get_all_five_words(file);
+        println!("all five letter words: {}", words_five_letter.len());
+
+        let words_five_letter = remove_repeat_letter_words(words_five_letter);
+        println!("without repeating letters: {}", words_five_letter.len());
+
+        let sorted_map = sort_anagrams(&words_five_letter);
+        println!("with reduced anagrams: {}", sorted_map.len());
+        sorted_map
+    };
+
+    let graph = match read_graph(GRAPH_FILENAME) {
         Ok(g) => g,
-        Err(_) => {
-            println!("Failed to load the graph. Creating new one...");
-            let file = File::open("words_alpha.txt").expect("Failed to open words_alpha file");
-            let words_five_letter = get_all_five_words(file);
-            println!("all five letter words: {}", words_five_letter.len());
-
-            let words_five_letter = remove_repeat_letter_words(words_five_letter);
-            println!("without repeating letters: {}", words_five_letter.len());
-
-            let sorted_map = sort_anagrams(&words_five_letter);
-            println!("with reduced anagrams: {}", sorted_map.len());
+        Err(e) => {
+            println!(
+                "Failed to load the graph: {}\n. Creating new one...",
+                e.to_string()
+            );
 
             let graph = create_graph(&sorted_map);
-            write_graph(&graph, "graph.csv").unwrap();
+            write_graph(&graph, GRAPH_FILENAME).expect("Failed to write graph to csv!");
             graph
         }
     };
 
-    // let unique = find_five_unique(&graph);
+    println!("Create optimized graph...");
+    let optimized_graph = create_index_graph(&graph);
 
-    // println!("{:?}", unique);
+    let unique = find_five_unique(&optimized_graph);
+
+    println!("Writing all cliques...");
+    write_all_cliques_from_unique(&unique, &sorted_map, OUT_FILENAME)
+        .expect("Failed to write output!");
+}
+
+fn write_all_cliques_from_unique(
+    unique: &Vec<Vec<usize>>,
+    sorted_map: &HashMap<String, Vec<String>>,
+    filename: &str,
+) -> std::io::Result<()> {
+    let mut keys: Vec<&String> = sorted_map.keys().collect();
+    keys.sort_unstable();
+    let mut file = File::create(filename)?;
+
+    for uniq_vec in unique {
+        let sorted_anagrams: Vec<&String> = uniq_vec.into_iter().map(|k| keys[*k]).collect();
+        let mut words: Vec<String> = Vec::new();
+        recur_create_words(0, "".to_string(), &mut words, &sorted_anagrams, sorted_map);
+        for word in words {
+            file.write((word + "\n").as_bytes())?;
+        }
+    }
+
+    Ok(())
+}
+
+fn recur_create_words(
+    i: usize,
+    input_str: String,
+    input_vec: &mut Vec<String>,
+    sorted_anagrams: &Vec<&String>,
+    sorted_map: &HashMap<String, Vec<String>>,
+) -> () {
+    if i == 5 {
+        input_vec.push(input_str);
+        return;
+    }
+    let ava_wrds = sorted_map.get(sorted_anagrams[i]).unwrap();
+    for wrds in ava_wrds {
+        let input_str_next = input_str.clone() + " " + wrds;
+        recur_create_words(
+            i + 1,
+            input_str_next,
+            input_vec,
+            sorted_anagrams,
+            sorted_map,
+        )
+    }
 }
 
 fn get_all_five_words(file: File) -> Vec<String> {
@@ -68,6 +129,28 @@ fn sort_anagrams(words: &Vec<String>) -> HashMap<String, Vec<String>> {
             .or_insert(vec![word.clone()]);
     }
     map
+}
+
+fn create_index_graph(graph: &HashMap<String, Vec<String>>) -> Vec<Vec<usize>> {
+    let mut keys = Vec::from_iter(graph.keys());
+    keys.sort_unstable();
+
+    let mut key_to_index = HashMap::new();
+    for (i, k) in keys.iter().enumerate() {
+        key_to_index.insert(k.clone(), i);
+    }
+
+    let mut out_vec = Vec::new();
+    for k in keys {
+        let paths = graph.get(k).unwrap();
+        let mut index_paths = Vec::new();
+        for p in paths {
+            index_paths.push(key_to_index.get(p).unwrap().clone());
+        }
+        out_vec.push(index_paths);
+    }
+
+    out_vec
 }
 
 fn create_graph<'a>(map: &'a HashMap<String, Vec<String>>) -> HashMap<String, Vec<String>> {
@@ -128,25 +211,9 @@ fn read_graph(filename: &str) -> Result<HashMap<String, Vec<String>>, Error> {
     Ok(graph)
 }
 
-fn pointer_graph<'a>(
-    graph: &'a HashMap<String, Vec<String>>,
-) -> HashMap<&'a String, Vec<&'a String>> {
-    let mut g = HashMap::new();
-    for (k, v) in graph {
-        let mut new_v = Vec::new();
-        for ev in v {
-            new_v.push(ev);
-        }
-        g.insert(k, new_v);
-    }
-    g
-}
-
 fn check_if_words_cover(w1: &String, w2: &String) -> bool {
-    for i in 0..w1.len() {
-        let l1 = w1.chars().nth(i).unwrap();
-        for j in 0..w2.len() {
-            let l2 = w2.chars().nth(j).unwrap();
+    for l1 in w1.chars() {
+        for l2 in w2.chars() {
             if l1 == l2 {
                 return true;
             }
@@ -155,75 +222,69 @@ fn check_if_words_cover(w1: &String, w2: &String) -> bool {
     false
 }
 
-fn compare_two_paths<'a>(p1: &'a Vec<String>, p2: &'a Vec<String>) -> Vec<&'a String> {
+fn compare_two_paths<'a>(p1: &'a Vec<usize>, p2: &'a Vec<usize>) -> Vec<usize> {
     let mut out = Vec::new();
-    for a in p1 {
-        for b in p2 {
+    for a in p2 {
+        for b in p1 {
             if a == b {
-                out.push(a);
+                out.push(*a);
             }
         }
     }
     out
 }
 
-fn find_five_unique<>(graph: &HashMap<String, Vec<String>>) -> Vec<Vec<String>> {
+fn find_five_unique(graph: &Vec<Vec<usize>>) -> Vec<Vec<usize>> {
+    let mut unique: Vec<Vec<usize>> = Vec::new();
     let start = Instant::now();
-
-    let mut unique: Vec<Vec<String>> = Vec::new();
-    let mut keys = Vec::from_iter(graph.iter().map(|e| e.0.clone()));
-    keys.sort_unstable();
-
-    let pb = ProgressBar::new(keys.len().try_into().unwrap());
+    let pb = ProgressBar::new(graph.len().try_into().unwrap());
     println!("Finding five unique in graph...");
+    let mut unique_num = 0;
 
-    for key in keys {
-        let node_p1 = graph.get(&key).unwrap();
-        if node_p1.len() < 4 {
+    for (i, n_i) in graph.iter().enumerate() {
+        pb.inc(1);
+        if n_i.len() < 4 {
             continue;
         }
-        for p1 in node_p1 {
-            let node_p2 = graph.get(p1).unwrap();
-            if node_p2.len() < 3 {
+        for j in n_i {
+            let r_ij = &graph[*j];
+            if r_ij.len() < 3 {
                 continue;
             }
-            let cnode_p2 = compare_two_paths(node_p1, node_p2);
-            if cnode_p2.len() < 3 {
+            let n_ij = compare_two_paths(&n_i, &r_ij);
+            if n_ij.len() < 3 {
                 continue;
             }
-            for p2 in &cnode_p2 {
-                let node_p3 = graph.get(p2).unwrap();
-                if node_p3.len() < 2 {
+            for k in &n_ij {
+                let r_ijk = &graph[*k];
+                if r_ijk.len() < 2 {
                     continue;
                 }
-                let cnode_p3 = compare_two_paths(&cnode_p2, node_p3);
-                if cnode_p3.len() < 2 {
+                let n_ijk = compare_two_paths(&n_ij, &r_ijk);
+                if n_ijk.len() < 2 {
                     continue;
                 }
-                for p3 in &cnode_p3 {
-                    let node_p4 = graph.get(p3).unwrap();
-                    if node_p4.len() < 1 {
-                        continue;
-                    }
-                    let cnode_p4 = compare_two_paths(&cnode_p3, node_p4);
-                    for p4 in &cnode_p4 {
+                for l in &n_ijk {
+                    let r_ijkl = &graph[*l];
+                    let n_ijkl = compare_two_paths(&n_ijk, &r_ijkl);
+                    for m in &n_ijkl {
                         unique.push(vec![
-                            key.clone(),
-                            (*p1).clone(),
-                            (*p2).clone(),
-                            (*p3).clone(),
-                            (*p4).clone(),
+                            i.clone(),
+                            (*j).clone(),
+                            (*k).clone(),
+                            (*l).clone(),
+                            (*m).clone(),
                         ]);
+                        unique_num += 1;
                     }
                 }
             }
         }
-
-        pb.inc(1);
     }
 
     pb.finish();
     println!("Done. Time elapsed: {:?}", start.elapsed());
+    println!("Found unique: {}", unique_num);
     unique
 }
 
@@ -238,5 +299,29 @@ mod tests {
         assert_eq!(word_diff_letters(&"abbde".to_string()), false);
         assert_eq!(word_diff_letters(&"cbcde".to_string()), false);
         assert_eq!(word_diff_letters(&"adcde".to_string()), false);
+    }
+
+    #[test]
+    fn test_check_if_words_cover() {
+        assert_eq!(
+            check_if_words_cover(&("abcd".to_string()), &("aefgh".to_string())),
+            true
+        );
+        assert_eq!(
+            check_if_words_cover(&("abcd".to_string()), &("efghi".to_string())),
+            false
+        );
+        assert_eq!(
+            check_if_words_cover(&("abcd".to_string()), &("abcd".to_string())),
+            true
+        );
+        assert_eq!(
+            check_if_words_cover(&("abcd".to_string()), &("abcde".to_string())),
+            true
+        );
+        assert_eq!(
+            check_if_words_cover(&("abcd".to_string()), &("xyzvw".to_string())),
+            false
+        );
     }
 }
