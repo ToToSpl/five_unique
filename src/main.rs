@@ -6,25 +6,29 @@ use std::time::Instant;
 use indicatif::ProgressBar;
 
 fn main() {
-    // let file = File::open("words_alpha.txt").expect("Failed to open words_alpha file");
-    // let words_five_letter = get_all_five_words(file);
-    // println!("all five letter words: {}", words_five_letter.len());
+    let graph = match read_graph("graph.csv") {
+        Ok(g) => g,
+        Err(_) => {
+            println!("Failed to load the graph. Creating new one...");
+            let file = File::open("words_alpha.txt").expect("Failed to open words_alpha file");
+            let words_five_letter = get_all_five_words(file);
+            println!("all five letter words: {}", words_five_letter.len());
 
-    // let words_five_letter = remove_repeat_letter_words(words_five_letter);
-    // println!("without repeating letters: {}", words_five_letter.len());
+            let words_five_letter = remove_repeat_letter_words(words_five_letter);
+            println!("without repeating letters: {}", words_five_letter.len());
 
-    // let sorted_map = sort_anagrams(&words_five_letter);
-    // println!("with reduced anagrams: {}", sorted_map.len());
+            let sorted_map = sort_anagrams(&words_five_letter);
+            println!("with reduced anagrams: {}", sorted_map.len());
 
-    // let graph = create_graph(&sorted_map);
-    // // write_graph(&graph, "graph.csv").unwrap();
+            let graph = create_graph(&sorted_map);
+            write_graph(&graph, "graph.csv").unwrap();
+            graph
+        }
+    };
 
-    let rel_graph = read_graph("graph.csv").unwrap();
-    let graph = pointer_graph(&rel_graph);
+    // let unique = find_five_unique(&graph);
 
-    let unique = find_five_unique(graph);
-
-    println!("{:?}", unique);
+    // println!("{:?}", unique);
 }
 
 fn get_all_five_words(file: File) -> Vec<String> {
@@ -66,12 +70,12 @@ fn sort_anagrams(words: &Vec<String>) -> HashMap<String, Vec<String>> {
     map
 }
 
-fn create_graph<'a>(map: &'a HashMap<String, Vec<String>>) -> HashMap<&'a String, Vec<&'a String>> {
+fn create_graph<'a>(map: &'a HashMap<String, Vec<String>>) -> HashMap<String, Vec<String>> {
     println!("Creating graph...");
     let start = Instant::now();
     let pb = ProgressBar::new(map.len().try_into().unwrap());
 
-    let mut graph: HashMap<&String, Vec<&String>> = HashMap::new();
+    let mut graph: HashMap<String, Vec<String>> = HashMap::new();
     let mut keys = Vec::from_iter(map.into_iter().map(|e| e.0));
     keys.sort_unstable();
 
@@ -85,7 +89,10 @@ fn create_graph<'a>(map: &'a HashMap<String, Vec<String>>) -> HashMap<&'a String
                 paths.push(k2);
             }
         }
-        graph.insert(k1, paths);
+        graph.insert(
+            (*k1).clone(),
+            paths.into_iter().map(|s| s.clone()).collect(),
+        );
         pb.inc(1);
     }
 
@@ -94,7 +101,7 @@ fn create_graph<'a>(map: &'a HashMap<String, Vec<String>>) -> HashMap<&'a String
     graph
 }
 
-fn write_graph(graph: &HashMap<&String, Vec<&String>>, filename: &str) -> std::io::Result<()> {
+fn write_graph(graph: &HashMap<String, Vec<String>>, filename: &str) -> std::io::Result<()> {
     let mut file = File::create(filename)?;
     for (k, v) in graph.clone().into_iter() {
         let mut line = String::new();
@@ -148,19 +155,19 @@ fn check_if_words_cover(w1: &String, w2: &String) -> bool {
     false
 }
 
-fn compare_two_paths<'a>(p1: &Vec<&'a String>, p2: &Vec<&'a String>) -> Vec<&'a String> {
+fn compare_two_paths<'a>(p1: &'a Vec<String>, p2: &'a Vec<String>) -> Vec<&'a String> {
     let mut out = Vec::new();
     for a in p1 {
         for b in p2 {
             if a == b {
-                out.push(a.clone());
+                out.push(a);
             }
         }
     }
     out
 }
 
-fn find_five_unique<'a>(graph: HashMap<&'a String, Vec<&'a String>>) -> Vec<Vec<String>> {
+fn find_five_unique<>(graph: &HashMap<String, Vec<String>>) -> Vec<Vec<String>> {
     let start = Instant::now();
 
     let mut unique: Vec<Vec<String>> = Vec::new();
@@ -171,7 +178,7 @@ fn find_five_unique<'a>(graph: HashMap<&'a String, Vec<&'a String>>) -> Vec<Vec<
     println!("Finding five unique in graph...");
 
     for key in keys {
-        let node_p1 = graph.get(key).unwrap();
+        let node_p1 = graph.get(&key).unwrap();
         if node_p1.len() < 4 {
             continue;
         }
