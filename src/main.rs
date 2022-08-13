@@ -57,7 +57,7 @@ fn write_all_cliques_from_unique(
     let mut file = File::create(filename)?;
 
     for uniq_vec in unique {
-        let sorted_anagrams: Vec<&String> = uniq_vec.into_iter().map(|k| keys[*k]).collect();
+        let sorted_anagrams: Vec<&String> = uniq_vec.iter().map(|k| keys[*k]).collect();
         let mut words: Vec<String> = Vec::new();
         recur_create_words(0, "".to_string(), &mut words, &sorted_anagrams, sorted_map);
         for word in words {
@@ -74,7 +74,7 @@ fn recur_create_words(
     input_vec: &mut Vec<String>,
     sorted_anagrams: &Vec<&String>,
     sorted_map: &HashMap<String, Vec<String>>,
-) -> () {
+) {
     if i == 5 {
         input_vec.push(input_str);
         return;
@@ -104,7 +104,7 @@ fn remove_repeat_letter_words(words: Vec<String>) -> Vec<String> {
     words.into_iter().filter(|w| word_diff_letters(w)).collect()
 }
 
-fn word_diff_letters(word: &String) -> bool {
+fn word_diff_letters(word: &str) -> bool {
     for i in 0..word.len() {
         let check_letter = word.chars().nth(i).unwrap();
         for j in i + 1..word.len() {
@@ -153,13 +153,13 @@ fn create_index_graph(graph: &HashMap<String, Vec<String>>) -> Vec<Vec<usize>> {
     out_vec
 }
 
-fn create_graph<'a>(map: &'a HashMap<String, Vec<String>>) -> HashMap<String, Vec<String>> {
+fn create_graph(map: &HashMap<String, Vec<String>>) -> HashMap<String, Vec<String>> {
     println!("Creating graph...");
     let start = Instant::now();
     let pb = ProgressBar::new(map.len().try_into().unwrap());
 
     let mut graph: HashMap<String, Vec<String>> = HashMap::new();
-    let mut keys = Vec::from_iter(map.into_iter().map(|e| e.0));
+    let mut keys = Vec::from_iter(map.iter().map(|e| e.0));
     keys.sort_unstable();
 
     // Graph must be symmetric, because five word series is symmetric.
@@ -211,7 +211,7 @@ fn read_graph(filename: &str) -> Result<HashMap<String, Vec<String>>, Error> {
     Ok(graph)
 }
 
-fn check_if_words_cover(w1: &String, w2: &String) -> bool {
+fn check_if_words_cover(w1: &str, w2: &str) -> bool {
     for l1 in w1.chars() {
         for l2 in w2.chars() {
             if l1 == l2 {
