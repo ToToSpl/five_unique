@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use indicatif::ProgressBar;
 
-const WORD_FILENAME: &str = "words_alpha.txt";
+const WORD_FILENAME: &str = "words_5.txt";
 const GRAPH_FILENAME: &str = "graph.csv";
 const OUT_FILENAME: &str = "cliques.txt";
 
@@ -211,6 +211,7 @@ fn read_graph(filename: &str) -> Result<HashMap<String, Vec<String>>, Error> {
     Ok(graph)
 }
 
+#[inline(always)]
 fn check_if_words_cover(w1: &str, w2: &str) -> bool {
     for l1 in w1.chars() {
         for l2 in w2.chars() {
@@ -222,7 +223,8 @@ fn check_if_words_cover(w1: &str, w2: &str) -> bool {
     false
 }
 
-fn compare_two_paths<'a>(p1: &'a Vec<usize>, p2: &'a Vec<usize>) -> Vec<usize> {
+#[inline(always)]
+fn compare_two_paths<'a>(p1: &'a [usize], p2: &'a [usize]) -> Vec<usize> {
     let mut out = Vec::new();
     for a in p2 {
         for b in p1 {
