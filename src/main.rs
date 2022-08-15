@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use indicatif::ProgressBar;
 
-const WORD_FILENAME: &str = "words_5.txt";
+const WORD_FILENAME: &str = "words_alpha.txt";
 const GRAPH_FILENAME: &str = "graph.csv";
 const OUT_FILENAME: &str = "cliques.txt";
 
