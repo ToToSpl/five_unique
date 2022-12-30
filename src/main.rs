@@ -2,13 +2,14 @@ use indicatif::ProgressBar;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead};
+use std::time::Instant;
 
 // const WORD_FILENAME: &str = "words_alpha.txt";
-const WORD_FILENAME: &str = "words_5.txt"; // used for now for faster debug
-const OUT_FILENAME: &str = "cliques.txt";
+const WORD_FILENAME: &str = "words_5.txt"; // use for faster debug
 const ALPHABET: &str = "abcdefghijklmnopqrstuvwxyz";
 
 fn main() {
+    let start = Instant::now();
     // load file with words and take every with five letters
     println!("Load file...");
     let mut words_five: Vec<String> =
@@ -32,66 +33,56 @@ fn main() {
     let graph = create_graph(&coded_words);
 
     println!("Finding cliques...");
-    let size = graph.len();
     let mut cliques: Vec<Vec<String>> = Vec::new();
-    let mut clique: Vec<&String> = Vec::with_capacity(5);
     let mut words_combined: Vec<u32> = vec![0; 4];
     let pb = ProgressBar::new(coded_words.len().try_into().unwrap());
-    for i in 0..size {
+    for i in 0..graph.len() {
         if graph[i].len() < 4 {
+            pb.inc(1);
             continue;
         }
-        clique.push(&words_five[i]); // 1
         words_combined[0] = coded_words[i];
         for j in &graph[i] {
             if words_combined[0] & coded_words[*j] != 0 {
                 continue;
             }
-            if graph[*j].len() < 3 {
-                continue;
-            }
             words_combined[1] = words_combined[0] | coded_words[*j];
-            clique.push(&words_five[*j]); // 2
 
             for k in &graph[*j] {
                 if words_combined[1] & coded_words[*k] != 0 {
                     continue;
                 }
-                if graph[*k].len() < 2 {
-                    continue;
-                }
                 words_combined[2] = words_combined[1] | coded_words[*k];
-                clique.push(&words_five[*k]); // 3
                 for l in &graph[*k] {
                     if words_combined[2] & coded_words[*l] != 0 {
                         continue;
                     }
-                    if graph[*l].len() < 1 {
-                        continue;
-                    }
                     words_combined[3] = words_combined[2] | coded_words[*l];
-                    clique.push(&words_five[*l]); // 4
-
                     for m in &graph[*l] {
                         if words_combined[3] & coded_words[*m] != 0 {
                             continue;
                         }
-                        clique.push(&words_five[*m]);
-                        cliques.push(clique.clone().into_iter().cloned().collect());
-                        println!("Found:\t{:?}", cliques.last());
-                        clique.pop();
+                        cliques.push(vec![
+                            words_five[i].clone(),
+                            words_five[*j].clone(),
+                            words_five[*k].clone(),
+                            words_five[*l].clone(),
+                            words_five[*m].clone(),
+                        ]);
                     }
-                    clique.pop();
                 }
-                clique.pop();
             }
-            clique.pop();
         }
-        clique.pop();
         pb.inc(1);
     }
 
-    // print_coded(&words_five, &coded_words);
+    for clique in cliques {
+        for word in clique {
+            print!("{:}\t", word);
+        }
+        println!("");
+    }
+    println!("Time taken: {:?}", start.elapsed());
 }
 
 fn word_repeat_char(w: &str, word_size: usize) -> bool {
@@ -113,6 +104,19 @@ fn word_to_u32(w: &str) -> u32 {
     coded
 }
 
+fn create_graph(coded: &Vec<u32>) -> Vec<Vec<usize>> {
+    let mut graph = vec![Vec::new(); coded.len()];
+    for i in 0..coded.len() {
+        for j in i + 1..coded.len() {
+            if coded[i] & coded[j] == 0 {
+                graph[i].push(j);
+            }
+        }
+    }
+    graph
+}
+
+#[allow(dead_code)]
 fn print_coded(worlds: &Vec<String>, coded: &Vec<u32>) {
     println!("world\tA B C D E F G H I J K L M N O P Q R S T U V W X Y Z");
     for i in 0..worlds.len() {
@@ -128,16 +132,4 @@ fn print_coded(worlds: &Vec<String>, coded: &Vec<u32>) {
         }
         println!("");
     }
-}
-
-fn create_graph(coded: &Vec<u32>) -> Vec<Vec<usize>> {
-    let mut graph = vec![Vec::new(); coded.len()];
-    for i in 0..coded.len() {
-        for j in i + 1..coded.len() {
-            if coded[i] & coded[j] == 0 {
-                graph[i].push(j);
-            }
-        }
-    }
-    graph
 }
