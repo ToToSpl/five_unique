@@ -2,11 +2,12 @@ use indicatif::ProgressBar;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Write};
 use std::time::Instant;
 
 // const WORD_FILENAME: &str = "words_alpha.txt";
 const WORD_FILENAME: &str = "words_5.txt"; // use for faster debug
+const OUT_FILE: &str = "cliques.txt";
 const ALPHABET: &str = "abcdefghijklmnopqrstuvwxyz";
 
 fn main() {
@@ -84,11 +85,12 @@ fn main() {
         pb.inc(1);
     }
 
-    for clique in cliques {
-        for word in clique {
-            print!("{:}\t", word);
+    println!("Found {:} cliques. Saving...", cliques.len());
+    {
+        let mut file = File::create(OUT_FILE).unwrap();
+        for clique in cliques.into_iter() {
+            file.write((clique.join("\t") + "\n").as_bytes()).unwrap();
         }
-        println!("");
     }
     println!("Time taken: {:?}", start.elapsed());
 }
